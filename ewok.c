@@ -13,7 +13,7 @@ struct ewk_bitarray {
 	size_t buffer_size;
 	size_t alloc_size;
 	size_t bit_size;
-	size_t last_rlw;
+	ewk_word *rlw;
 };
 
 #define RLW_RUNNING_BITS (sizeof(ewk_word) * 4)
@@ -26,44 +26,43 @@ struct ewk_bitarray {
 
 #define RLW_RUNNING_LEN_PLUS_BIT ((1 << (RLW_RUNNING_BITS + 1)) - 1)
 
-static bool rlw_get_run_bit(struct ewk_bitarray *self)
+static bool rlw_get_run_bit(ewk_word *word)
 {
-	return self->buffer[self->last_rlw] & (ewk_word)1;
+	return *word & (ewk_word)1;
 }
 
-static void rlw_set_run_bit(struct ewk_bitarray *self, bool b)
+static void rlw_set_run_bit(ewk_word *word, bool b)
 {
 	if (b) {
-		self->buffer[self->last_rlw] |= (ewk_word)1;
+		*word |= (ewk_word)1;
 	} else {
-		self->buffer[self->last_rlw] &= (ewk_word)(~1);
+		*word &= (ewk_word)(~1);
 	}
 }
 
-static void rlw_set_running_len(struct ewk_bitarray *self, ewk_word l)
+static void rlw_set_running_len(ewk_word *word, ewk_word l)
 {
-	self->buffer[self->last_rlw] |= RLW_LARGEST_RUNNING_COUNT_SHIFT;
-	self->buffer[self->last_rlw] &= (l << 1) | (~RLW_LARGEST_RUNNING_COUNT_SHIFT);
+	*word |= RLW_LARGEST_RUNNING_COUNT_SHIFT;
+	*word &= (l << 1) | (~RLW_LARGEST_RUNNING_COUNT_SHIFT);
 }
 
-static ewk_word rlw_get_running_len(struct ewk_bitarray *self)
+static ewk_word rlw_get_running_len(ewk_word *word)
 {
-	return (self->buffer[self->last_rlw] >> 1) & RLW_LARGEST_RUNNING_COUNT;
+	return (*word >> 1) & RLW_LARGEST_RUNNING_COUNT;
 }
 
-static ewk_word rlw_get_literal_words(struct ewk_bitarray *self)
+static ewk_word rlw_get_literal_words(ewk_word *word)
 {
-	return self->buffer[self->last_rlw] >> (1 + RLW_RUNNING_BITS);
+	return *word >> (1 + RLW_RUNNING_BITS);
 }
 
-static ewk_word rlw_set_literal_words(struct ewk_bitarray *self, ewk_word l)
+static ewk_word rlw_set_literal_words(ewk_word *word, ewk_word l)
 {
-	self->buffer[self->last_rlw] |= ~RLW_RUNNING_LEN_PLUS_BIT;
-	self->buffer[self->last_rlw] &=
-		(l << (RLW_RUNNING_BITS + 1)) | RLW_RUNNING_LEN_PLUS_BIT;
+	*word |= ~RLW_RUNNING_LEN_PLUS_BIT;
+	*word &= (l << (RLW_RUNNING_BITS + 1)) | RLW_RUNNING_LEN_PLUS_BIT;
 }
 
-static ewk_word rlw_size(struct ewk_bitarray *self)
+static ewk_word rlw_size(ewk_word *self)
 {
 	return rlw_get_running_len(self) + rlw_get_literal_words(self);
 }
@@ -76,68 +75,71 @@ static ewk_word min_size(size_t a, size_t b)
 static void buffer_push(struct ewk_bitarray *self, ewk_word value)
 {
 	if (self->buffer_size + 1 >= self->alloc_size) {
+		size_t rlw_offset = (uint8_t *)self->rlw - (uint8_t *)self->buffer;
+
 		self->alloc_size = self->alloc_size * 1.5;
 		self->buffer = realloc(self->buffer, self->alloc_size * sizeof(ewk_word));
+		self->rlw = self->buffer + (rlw_offset / sizeof(size_t));
 	}
 
 	self->buffer[self->buffer_size++] = value;
 }
 
+static void buffer_push_rlw(struct ewk_bitarray *self, ewk_word value)
+{
+	buffer_push(self, value);
+	self->rlw = self->buffer + self->buffer_size - 1;
+}
+
 static void add_word_stream(struct ewk_bitarray *self, bool v, size_t number)
 {
-	if (rlw_get_run_bit(self) != v && rlw_size(self) == 0) {
-		rlw_set_run_bit(self, v);
+	if (rlw_get_run_bit(self->rlw) != v && rlw_size(self->rlw) == 0) {
+		rlw_set_run_bit(self->rlw, v);
 	}
-	else if (rlw_get_literal_words(self) != 0 || rlw_get_run_bit(self) != v) {
-		buffer_push(self, 0);
-		self->last_rlw = self->buffer_size - 1;
-
-		if (v)
-			rlw_set_run_bit(self, v);
+	else if (rlw_get_literal_words(self->rlw) != 0 || rlw_get_run_bit(self->rlw) != v) {
+		buffer_push_rlw(self, 0);
+		if (v) rlw_set_run_bit(self->rlw, v);
 	}
 
-	ewk_word runlen = rlw_get_running_len(self); 
+	ewk_word runlen = rlw_get_running_len(self->rlw); 
 	ewk_word can_add = min_size(number, RLW_LARGEST_RUNNING_COUNT - runlen);
 
-	rlw_set_running_len(self, runlen + can_add);
+	rlw_set_running_len(self->rlw, runlen + can_add);
 	number -= can_add;
 
 	while (number >= RLW_LARGEST_RUNNING_COUNT) {
-		buffer_push(self, 0);
-		self->last_rlw = self->buffer_size - 1;
+		buffer_push_rlw(self, 0);
 
-		if (v) rlw_set_run_bit(self, v);
-		rlw_set_running_len(self, RLW_LARGEST_RUNNING_COUNT);
+		if (v) rlw_set_run_bit(self->rlw, v);
+		rlw_set_running_len(self->rlw, RLW_LARGEST_RUNNING_COUNT);
 
 		number -= RLW_LARGEST_RUNNING_COUNT;
 	}
 
 	if (number > 0) {
-		buffer_push(self, 0);
-		self->last_rlw = self->buffer_size - 1;
+		buffer_push_rlw(self, 0);
 
-		if (v) rlw_set_run_bit(self, v);
-		rlw_set_running_len(self, number);
+		if (v) rlw_set_run_bit(self->rlw, v);
+		rlw_set_running_len(self->rlw, number);
 	}
 }
 
 static size_t add_literal(struct ewk_bitarray *self, ewk_word new_data)
 {
-	ewk_word current_num = rlw_get_literal_words(self); 
+	ewk_word current_num = rlw_get_literal_words(self->rlw); 
 
 	if (current_num >= RLW_LARGEST_LITERAL_COUNT) {
-		buffer_push(self, 0);
-		self->last_rlw = self->buffer_size - 1;
+		buffer_push_rlw(self, 0);
 
-		rlw_set_literal_words(self, 1);
+		rlw_set_literal_words(self->rlw, 1);
 		buffer_push(self, new_data);
 		return 2;
 	}
 
-	rlw_set_literal_words(self, current_num + 1);
+	rlw_set_literal_words(self->rlw, current_num + 1);
 
 	/* sanity check */
-	assert(rlw_get_literal_words(self) == current_num + 1);
+	assert(rlw_get_literal_words(self->rlw) == current_num + 1);
 
 	buffer_push(self, new_data);
 	return 1;
@@ -145,34 +147,34 @@ static size_t add_literal(struct ewk_bitarray *self, ewk_word new_data)
 
 static size_t add_empty_word(struct ewk_bitarray *self, bool v)
 {
-	bool no_literal = (rlw_get_literal_words(self) == 0);
-	ewk_word run_len = rlw_get_running_len(self);
+	bool no_literal = (rlw_get_literal_words(self->rlw) == 0);
+	ewk_word run_len = rlw_get_running_len(self->rlw);
 
 	if (no_literal && run_len == 0) {
-		rlw_set_run_bit(self, v);
-		assert(rlw_get_run_bit(self) == v);
+		rlw_set_run_bit(self->rlw, v);
+		assert(rlw_get_run_bit(self->rlw) == v);
 	}
 
-	if (no_literal && rlw_get_run_bit(self) == v && run_len < RLW_LARGEST_RUNNING_COUNT) {
-		rlw_set_running_len(self, run_len + 1);
-		assert(rlw_get_running_len(self) == run_len + 1);
+	if (no_literal && rlw_get_run_bit(self->rlw) == v &&
+		run_len < RLW_LARGEST_RUNNING_COUNT) {
+		rlw_set_running_len(self->rlw, run_len + 1);
+		assert(rlw_get_running_len(self->rlw) == run_len + 1);
 		return 0;
 	}
 	
 	else {
-		buffer_push(self, 0);
-		self->last_rlw = self->buffer_size - 1;
+		buffer_push_rlw(self, 0);
 
-		assert(rlw_get_running_len(self) == 0);
-		assert(rlw_get_run_bit(self) == 0);
-		assert(rlw_get_literal_words(self) == 0);
+		assert(rlw_get_running_len(self->rlw) == 0);
+		assert(rlw_get_run_bit(self->rlw) == 0);
+		assert(rlw_get_literal_words(self->rlw) == 0);
 
-		rlw_set_run_bit(self, v);
-		assert(rlw_get_run_bit(self) == v);
+		rlw_set_run_bit(self->rlw, v);
+		assert(rlw_get_run_bit(self->rlw) == v);
 
-		rlw_set_running_len(self, 1);
-		assert(rlw_get_running_len(self) == 1);
-		assert(rlw_get_literal_words(self) == 0);
+		rlw_set_running_len(self->rlw, 1);
+		assert(rlw_get_running_len(self->rlw) == 1);
+		assert(rlw_get_literal_words(self->rlw) == 0);
 		return 1;
 	}
 }
@@ -195,8 +197,8 @@ void ewk_set(struct ewk_bitarray *self, size_t i)
 		return;
 	}
 
-	if (rlw_get_literal_words(self) == 0) {
-		rlw_set_running_len(self, rlw_get_running_len(self) - 1);
+	if (rlw_get_literal_words(self->rlw) == 0) {
+		rlw_set_running_len(self->rlw, rlw_get_running_len(self->rlw) - 1);
 		add_literal(self, 1 << (i % BITS_IN_WORD));
 		return;
 	}
@@ -206,7 +208,7 @@ void ewk_set(struct ewk_bitarray *self, size_t i)
 	/* check if we just completed a stream of 1s */
 	if (self->buffer[self->buffer_size - 1] == (ewk_word)(~0)) {
 		self->buffer[--self->buffer_size] = 0;
-		rlw_set_literal_words(self, rlw_get_literal_words(self) - 1);
+		rlw_set_literal_words(self->rlw, rlw_get_literal_words(self->rlw) - 1);
 		add_empty_word(self, true);
 	}
 }
@@ -218,20 +220,20 @@ void ewk_each_bit(struct ewk_bitarray *self, void (*callback)(size_t, void*), vo
 	size_t k;
 
 	while (pointer < self->buffer_size) {
-		self->last_rlw = pointer;
+		ewk_word *word = &self->buffer[pointer];
 
-		if (rlw_get_run_bit(self)) {
-			size_t len = rlw_get_running_len(self) * BITS_IN_WORD;
+		if (rlw_get_run_bit(word)) {
+			size_t len = rlw_get_running_len(word) * BITS_IN_WORD;
 			for (k = 0; k < len; ++k, ++pos) {
 				callback(pos, payload);
 			}
 		} else {
-			pos += rlw_get_running_len(self) * BITS_IN_WORD;
+			pos += rlw_get_running_len(word) * BITS_IN_WORD;
 		}
 
 		++pointer;
 
-		for (k = 0; k < rlw_get_literal_words(self); ++k) {
+		for (k = 0; k < rlw_get_literal_words(word); ++k) {
 			int c;
 
 			/* todo: zero count optimization */
@@ -259,7 +261,7 @@ struct ewk_bitarray *ewk_new(void)
 
 	array->buffer_size = 1;
 	array->bit_size = 0;
-	array->last_rlw = 0;
+	array->rlw = array->buffer;
 
 	return array;
 }
