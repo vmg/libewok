@@ -253,3 +253,62 @@ struct ewah_bitmap *ewah_bitmap_new(void)
 	return array;
 }
 
+struct ewah_iterator {
+	struct ewah_bitmap *bitmap;
+	size_t pointer;
+	eword_t compressed, literals;
+	eword_t rl, lw;
+	bool b;
+};
+
+static void read_new_rlw(struct ewah_iterator *it)
+{
+	eword_t *word = NULL;
+
+	it->literals = 0;
+	it->compressed = 0;
+
+	while (1) {
+		word = &it->bitmap->buffer[it->pointer];
+
+		it->rl = rlw_get_running_len(word);
+		it->lw = rlw_get_literal_words(word);
+		it->b = rlw_get_run_bit(word);
+
+		if (it->rl || it->lw)
+			return;
+
+		if (it->pointer < it->bitmap->buffer_size) {
+			it->pointer++;
+		} else {
+			it->pointer = it->bitmap->buffer_size;
+			return;
+		}
+	}
+}
+
+eword_t ewah_iterator_next(struct ewah_iterator *it)
+{
+	eword_t res;
+
+	if (it->compressed < it->rl) {
+		it->compressed++;
+		res = it->b ? (eword_t)(~0) : 0;
+	} else {
+		assert(it->literals < it->lw);
+
+		it->literals++;
+		it->pointer++;
+
+		assert(it->pointer < it->bitmap->buffer_size);
+
+		res = it->bitmap->buffer[it->pointer];
+	}
+
+	if (it->compressed == it->rl && it->literals == it->lw) {
+		if (++it->pointer < it->bitmap->buffer_size)
+			read_new_rlw(it);
+	}
+
+	return res;
+}
