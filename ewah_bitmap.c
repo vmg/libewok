@@ -322,8 +322,6 @@ static void read_new_rlw(struct ewah_iterator *it)
 
 bool ewah_iterator_next(eword_t *next, struct ewah_iterator *it)
 {
-	eword_t res;
-
 	if (it->pointer >= it->buffer_size)
 		return false;
 
