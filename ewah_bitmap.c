@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "ewok.h"
 #include "ewok_rlw.h"
@@ -32,7 +33,7 @@ static void buffer_push_rlw(struct ewah_bitmap *self, eword_t value)
 
 static size_t add_word_stream(struct ewah_bitmap *self, bool v, size_t number)
 {
-	size_t added;
+	size_t added = 0;
 
 	if (rlw_get_run_bit(self->rlw) != v && rlw_size(self->rlw) == 0) {
 		rlw_set_run_bit(self->rlw, v);

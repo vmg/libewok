@@ -50,7 +50,7 @@ static eword_t rlw_get_literal_words(const eword_t *word)
 	return *word >> (1 + RLW_RUNNING_BITS);
 }
 
-static eword_t rlw_set_literal_words(eword_t *word, eword_t l)
+static void rlw_set_literal_words(eword_t *word, eword_t l)
 {
 	*word |= ~RLW_RUNNING_LEN_PLUS_BIT;
 	*word &= (l << (RLW_RUNNING_BITS + 1)) | RLW_RUNNING_LEN_PLUS_BIT;
