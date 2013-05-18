@@ -161,17 +161,17 @@ void ewah_bitmap_set(struct ewah_bitmap *self, size_t i)
 		if (dist > 1)
 			add_word_stream(self, false, dist - 1);
 
-		add_literal(self, 1 << (i % BITS_IN_WORD));
+		add_literal(self, (eword_t)1 << (i % BITS_IN_WORD));
 		return;
 	}
 
 	if (rlw_get_literal_words(self->rlw) == 0) {
 		rlw_set_running_len(self->rlw, rlw_get_running_len(self->rlw) - 1);
-		add_literal(self, 1 << (i % BITS_IN_WORD));
+		add_literal(self, (eword_t)1 << (i % BITS_IN_WORD));
 		return;
 	}
 
-	self->buffer[self->buffer_size - 1] |= (1 << (i % BITS_IN_WORD));
+	self->buffer[self->buffer_size - 1] |= ((eword_t)1 << (i % BITS_IN_WORD));
 
 	/* check if we just completed a stream of 1s */
 	if (self->buffer[self->buffer_size - 1] == (eword_t)(~0)) {
@@ -206,7 +206,7 @@ void ewah_bitmap_each_bit(struct ewah_bitmap *self, void (*callback)(size_t, voi
 
 			/* todo: zero count optimization */
 			for (c = 0; c < BITS_IN_WORD; ++c, ++pos) {
-				if ((self->buffer[pointer] & (1 << c)) != 0) {
+				if ((self->buffer[pointer] & ((eword_t)1 << c)) != 0) {
 					callback(pos, payload);
 				}
 			}

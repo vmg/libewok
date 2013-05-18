@@ -9,7 +9,7 @@
 
 #define RLW_LARGEST_RUNNING_COUNT_SHIFT (RLW_LARGEST_RUNNING_COUNT << 1)
 
-#define RLW_RUNNING_LEN_PLUS_BIT ((1 << (RLW_RUNNING_BITS + 1)) - 1)
+#define RLW_RUNNING_LEN_PLUS_BIT (((eword_t)1 << (RLW_RUNNING_BITS + 1)) - 1)
 
 static bool rlw_get_run_bit(const eword_t *word)
 {

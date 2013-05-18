@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef uint32_t eword_t;
+typedef uint64_t eword_t;
 #define BITS_IN_WORD (sizeof(eword_t) * 8)
 
 struct ewah_bitmap {
