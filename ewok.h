@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 typedef uint32_t eword_t;
+#define BITS_IN_WORD (sizeof(eword_t) * 8)
 
 struct ewah_bitmap {
 	eword_t *buffer;
@@ -15,6 +16,9 @@ struct ewah_bitmap {
 };
 
 struct ewah_bitmap *ewah_bitmap_new(void);
+void ewah_bitmap_clear(struct ewah_bitmap *bitmap);
+void ewah_bitmap_free(struct ewah_bitmap *bitmap);
+
 int ewah_bitmap_load(struct ewah_bitmap *self, int fd, bool load_bit_size);
 int ewah_bitmap_dump(struct ewah_bitmap *self, int fd, bool dump_bit_size);
 
@@ -37,5 +41,14 @@ struct ewah_iterator {
 void ewah_iterator_init(struct ewah_iterator *it, struct ewah_bitmap *parent);
 bool ewah_iterator_next(eword_t *next, struct ewah_iterator *it);
 
+struct bitmap {
+	eword_t *words;
+	size_t word_alloc;
+};
+
+void bitmap_set(struct bitmap *self, size_t pos);
+void bitmap_clear(struct bitmap *self, size_t pos);
+bool bitmap_get(struct bitmap *self, size_t pos);
+void bitmap_compress(struct ewah_bitmap *ewah, struct bitmap *bitmap);
 
 #endif

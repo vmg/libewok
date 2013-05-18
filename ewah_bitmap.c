@@ -4,7 +4,7 @@
 #include "ewok.h"
 #include "ewok_rlw.h"
 
-static eword_t min_size(size_t a, size_t b)
+static inline eword_t min_size(size_t a, size_t b)
 {
 	return a < b ? a : b;
 }
@@ -16,6 +16,8 @@ static void buffer_push(struct ewah_bitmap *self, eword_t value)
 
 		self->alloc_size = self->alloc_size * 1.5;
 		self->buffer = realloc(self->buffer, self->alloc_size * sizeof(eword_t));
+		assert(self->buffer);
+
 		self->rlw = self->buffer + (rlw_offset / sizeof(size_t));
 	}
 
@@ -265,20 +267,31 @@ int ewah_bitmap_load(struct ewah_bitmap *self, int fd, bool load_bit_size)
 
 struct ewah_bitmap *ewah_bitmap_new(void)
 {
-	struct ewah_bitmap *array;
+	struct ewah_bitmap *bitmap;
 
-	array = malloc(sizeof(struct ewah_bitmap));
-	if (array == NULL)
+	bitmap = malloc(sizeof(struct ewah_bitmap));
+	if (bitmap == NULL)
 		return NULL;
 
-	array->buffer = malloc(32 * sizeof(eword_t));
-	array->alloc_size = 32;
+	bitmap->buffer = malloc(32 * sizeof(eword_t));
+	bitmap->alloc_size = 32;
 
-	array->buffer_size = 1;
-	array->bit_size = 0;
-	array->rlw = array->buffer;
+	ewah_bitmap_clear(bitmap);
 
-	return array;
+	return bitmap;
+}
+
+void ewah_bitmap_clear(struct ewah_bitmap *bitmap)
+{
+	bitmap->buffer_size = 1;
+	bitmap->bit_size = 0;
+	bitmap->rlw = bitmap->buffer;
+}
+
+void ewah_bitmap_free(struct ewah_bitmap *bitmap)
+{
+	free(bitmap->buffer);
+	free(bitmap);
 }
 
 static void read_new_rlw(struct ewah_iterator *it)
