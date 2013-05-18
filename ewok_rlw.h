@@ -13,7 +13,7 @@
 
 #define RLW_RUNNING_LEN_PLUS_BIT ((1 << (RLW_RUNNING_BITS + 1)) - 1)
 
-static bool rlw_get_run_bit(eword_t *word)
+static bool rlw_get_run_bit(const eword_t *word)
 {
 	return *word & (eword_t)1;
 }
@@ -42,12 +42,12 @@ static void rlw_set_running_len(eword_t *word, eword_t l)
 	*word &= (l << 1) | (~RLW_LARGEST_RUNNING_COUNT_SHIFT);
 }
 
-static eword_t rlw_get_running_len(eword_t *word)
+static eword_t rlw_get_running_len(const eword_t *word)
 {
 	return (*word >> 1) & RLW_LARGEST_RUNNING_COUNT;
 }
 
-static eword_t rlw_get_literal_words(eword_t *word)
+static eword_t rlw_get_literal_words(const eword_t *word)
 {
 	return *word >> (1 + RLW_RUNNING_BITS);
 }
@@ -58,7 +58,7 @@ static eword_t rlw_set_literal_words(eword_t *word, eword_t l)
 	*word &= (l << (RLW_RUNNING_BITS + 1)) | RLW_RUNNING_LEN_PLUS_BIT;
 }
 
-static eword_t rlw_size(eword_t *self)
+static eword_t rlw_size(const eword_t *self)
 {
 	return rlw_get_running_len(self) + rlw_get_literal_words(self);
 }
