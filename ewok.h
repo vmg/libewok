@@ -56,19 +56,19 @@ void ewah_bitmap_free(struct ewah_bitmap *bitmap);
  *
  * Returns: 0 on success, -1 if a reading error occured (check errno)
  */
-int ewah_bitmap_load(struct ewah_bitmap *self, int fd, bool load_bit_size);
+int ewah_bitmap_deserialize(struct ewah_bitmap *self, int fd);
 
 /**
  * Dump an existing bitmap to a file descriptor. The bitmap
  * is dumped in compressed form, with the following structure:
  *
- * | bit_count | number_of_words | words...
+ * | bit_count | number_of_words | words... | rlw_position
  *
  * The fd must be open in write mode.
  *
  * Returns: 0 on success, -1 if a writing error occured (check errno)
  */
-int ewah_bitmap_dump(struct ewah_bitmap *self, int fd, bool dump_bit_size);
+int ewah_bitmap_serialize(struct ewah_bitmap *self, int fd);
 
 /**
  * Logical not (bitwise negation) in-place on the bitmap

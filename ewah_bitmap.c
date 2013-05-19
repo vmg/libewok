@@ -22,6 +22,17 @@
 #include "ewok.h"
 #include "ewok_rlw.h"
 
+#if defined(__linux__)
+#  include <endian.h>
+#elif defined(__FreeBSD__) || defined(__NetBSD__)
+#  include <sys/endian.h>
+#elif defined(__OpenBSD__)
+#  include <sys/types.h>
+#  define be16toh(x) betoh16(x)
+#  define be32toh(x) betoh32(x)
+#  define be64toh(x) betoh64(x)
+#endif
+
 static inline eword_t min_size(size_t a, size_t b)
 {
 	return a < b ? a : b;
@@ -253,34 +264,108 @@ void ewah_bitmap_not(struct ewah_bitmap *self)
 	}
 }
 
-int ewah_bitmap_dump(struct ewah_bitmap *self, int fd, bool dump_bit_size)
+int ewah_bitmap_serialize(struct ewah_bitmap *self, int fd)
 {
-	if (dump_bit_size) {
-		if (write(fd, &self->bit_size, sizeof(self->bit_size)) < 0)
+	size_t i;
+	eword_t dump[2048];
+	const size_t words_per_dump = sizeof(dump) / sizeof(eword_t);
+
+	/* 32 bit -- bit size fr the map */
+	uint32_t bitsize =  htobe32((uint32_t)self->bit_size);
+	if (write(fd, &bitsize, 4) != 4)
+		return -1;
+
+	/** 32 bit -- number of compressed 64-bit words */
+	uint32_t word_count =  htobe32((uint32_t)self->buffer_size);
+	if (write(fd, &word_count, 4) != 4)
+		return -1;
+
+	/** 64 bit x N -- compressed words */
+	const eword_t *buffer = self->buffer;
+	size_t words_left = self->buffer_size;
+
+	while (words_left >= words_per_dump) {
+		for (i = 0; i < words_per_dump; ++i, ++buffer)
+			dump[i] = htobe64(*buffer);
+
+		if (write(fd, dump, sizeof(dump)) != sizeof(dump))
+			return -1;
+
+		words_left -= words_per_dump;
+	}
+
+	if (words_left) {
+		for (i = 0; i < words_left; ++i, ++buffer)
+			dump[i] = htobe64(*buffer);
+
+		if (write(fd, dump, words_left * 8) != words_left * 8)
 			return -1;
 	}
 
-	if (write(fd, &self->buffer_size, sizeof(self->buffer_size)) < 0)
+	/** 32 bit -- position for the RLW */
+	uint32_t rlw_pos = (uint8_t*)self->rlw - (uint8_t *)self->buffer;
+	rlw_pos = htobe32(rlw_pos / sizeof(eword_t));
+
+	if (write(fd, &rlw_pos, 4) != 4)
 		return -1;
 
-	return write(fd, self->buffer, self->buffer_size * sizeof(eword_t));
+	return 0;
 }
 
-int ewah_bitmap_load(struct ewah_bitmap *self, int fd, bool load_bit_size)
+int ewah_bitmap_deserialize(struct ewah_bitmap *self, int fd)
 {
-	if (load_bit_size) {
-		if (read(fd, &self->bit_size, sizeof(self->bit_size)) < 0)
+	size_t i;
+	eword_t dump[2048];
+	const size_t words_per_dump = sizeof(dump) / sizeof(eword_t);
+
+	/* 32 bit -- bit size fr the map */
+	uint32_t bitsize;
+	if (read(fd, &bitsize, 4) != 4)
+		return -1;
+
+	self->bit_size = (size_t)be32toh(bitsize);
+
+	/** 32 bit -- number of compressed 64-bit words */
+	uint32_t word_count;
+	if (read(fd, &word_count, 4) != 4)
+		return -1;
+
+	self->buffer_size = (size_t)be32toh(word_count);
+	self->buffer = realloc(self->buffer, self->buffer_size * sizeof(eword_t));
+
+	if (!self->buffer)
+		return -1;
+
+	/** 64 bit x N -- compressed words */
+	eword_t *buffer = self->buffer;
+	size_t words_left = self->buffer_size;
+
+	while (words_left >= words_per_dump) {
+		if (read(fd, dump, sizeof(dump)) != sizeof(dump))
 			return -1;
+
+		for (i = 0; i < words_per_dump; ++i, ++buffer)
+			*buffer = be64toh(dump[i]);
+
+		words_left -= words_per_dump;
 	}
 
-	if (write(fd, &self->buffer_size, sizeof(self->buffer_size)) < 0)
+	if (words_left) {
+		if (read(fd, dump, words_left * 8) != words_left * 8)
+			return -1;
+
+		for (i = 0; i < words_left; ++i, ++buffer)
+			*buffer = be64toh(dump[i]);
+	}
+
+	/** 32 bit -- position for the RLW */
+	uint32_t rlw_pos;
+	if (read(fd, &rlw_pos, 4) != 4)
 		return -1;
 
-	self->buffer = realloc(self->buffer, self->buffer_size * sizeof(eword_t));
-	if (self->buffer == NULL)
-		return -1;
+	self->rlw = self->buffer + be32toh(rlw_pos);
 
-	return read(fd, self->buffer, self->buffer_size * sizeof(eword_t));
+	return 0;
 }
 
 struct ewah_bitmap *ewah_bitmap_new(void)
