@@ -1,7 +1,7 @@
 libewok
 =======
 
-EWAH Compressed bitmaps in C. Ported from javaewah.
+EWAH Compressed bitmaps in C.
 
 Usage
 -----
@@ -31,16 +31,17 @@ ewah_bitmap_free(array);
 Related docs:
 ------------
 
-- http://github.com/lemire/javaewah
+- https://github.com/lemire/EWAHBoolArray
+- https://github.com/lemire/javaewah
 - http://arxiv.org/abs/0901.3751
 - http://www.slideshare.net/lemire/all-about-bitmap-indexes-and-sorting-them
 
 License
 -------
 
-This code is licensed under Apache License, Version 2.0 (ASL2.0).
+This port is based off the original EWAHBoolArray implementation by Daniel Lemire and it's licensed under the terms of the GPLv2, with the original author's permission.
 
-This code is a port from the original javaewah project, authored by:
+Original contributors as follows:
 
 - Daniel Lemire (http://lemire.me/en/), 
 - Cliff Moon (https://github.com/cliffmoon), 
