@@ -20,6 +20,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "ewok.h"
 #include "ewok_rlw.h"
@@ -40,16 +41,24 @@ static inline eword_t min_size(size_t a, size_t b)
 	return a < b ? a : b;
 }
 
-static void buffer_push(struct ewah_bitmap *self, eword_t value)
+static inline void buffer_grow(struct ewah_bitmap *self, size_t new_size)
+{
+	size_t rlw_offset = (uint8_t *)self->rlw - (uint8_t *)self->buffer;
+
+	if (self->alloc_size >= new_size)
+		return;
+
+	self->alloc_size = new_size;
+	self->buffer = realloc(self->buffer, self->alloc_size * sizeof(eword_t));
+	assert(self->buffer);
+
+	self->rlw = self->buffer + (rlw_offset / sizeof(size_t));
+}
+
+static inline void buffer_push(struct ewah_bitmap *self, eword_t value)
 {
 	if (self->buffer_size + 1 >= self->alloc_size) {
-		size_t rlw_offset = (uint8_t *)self->rlw - (uint8_t *)self->buffer;
-
-		self->alloc_size = self->alloc_size * 1.5;
-		self->buffer = realloc(self->buffer, self->alloc_size * sizeof(eword_t));
-		assert(self->buffer);
-
-		self->rlw = self->buffer + (rlw_offset / sizeof(size_t));
+		buffer_grow(self, self->buffer_size * 1.5);
 	}
 
 	self->buffer[self->buffer_size++] = value;
@@ -61,7 +70,7 @@ static void buffer_push_rlw(struct ewah_bitmap *self, eword_t value)
 	self->rlw = self->buffer + self->buffer_size - 1;
 }
 
-static size_t add_word_stream(struct ewah_bitmap *self, bool v, size_t number)
+static size_t add_empty_word_stream(struct ewah_bitmap *self, bool v, size_t number)
 {
 	size_t added = 0;
 
@@ -101,13 +110,13 @@ static size_t add_word_stream(struct ewah_bitmap *self, bool v, size_t number)
 	return added;
 }
 
-size_t ewah_bitmap_add_word_stream(struct ewah_bitmap *self, bool v, size_t number)
+size_t ewah_bitmap_add_empty_word_stream(struct ewah_bitmap *self, bool v, size_t number)
 {
 	if (number == 0)
 		return 0;
 
 	self->bit_size += number * BITS_IN_WORD;
-	return add_word_stream(self, v, number);
+	return add_empty_word_stream(self, v, number);
 }
 
 static size_t add_literal(struct ewah_bitmap *self, eword_t new_data)
@@ -129,6 +138,41 @@ static size_t add_literal(struct ewah_bitmap *self, eword_t new_data)
 
 	buffer_push(self, new_data);
 	return 1;
+}
+
+static void add_dirty_word_stream(
+	struct ewah_bitmap *self, const eword_t *buffer, size_t number, bool negate)
+{
+	size_t literals, can_add;
+
+	while (1) {
+		literals = rlw_get_literal_words(self->rlw);
+		can_add = min_size(number, RLW_LARGEST_LITERAL_COUNT - literals);
+
+		rlw_set_literal_words(self->rlw, literals + can_add);
+
+		if (self->buffer_size + can_add >= self->alloc_size) {
+			buffer_grow(self, (self->buffer_size + can_add) * 1.5);
+		}
+
+		if (negate) {
+			size_t i;
+			for (i = 0; i < can_add; ++i)
+				self->buffer[self->buffer_size++] = ~buffer[i];
+		} else {
+			memcpy(self->buffer + self->buffer_size, buffer, can_add * sizeof(eword_t));
+			self->buffer_size += can_add;
+		}
+
+		self->bit_size += can_add * BITS_IN_WORD;
+
+		if (can_add == number)
+			return;
+
+		buffer_push_rlw(self, 0);
+		buffer += can_add;
+		number -= can_add;
+	}
 }
 
 static size_t add_empty_word(struct ewah_bitmap *self, bool v)
@@ -190,7 +234,7 @@ void ewah_bitmap_set(struct ewah_bitmap *self, size_t i)
 
 	if (dist > 0) {
 		if (dist > 1)
-			add_word_stream(self, false, dist - 1);
+			add_empty_word_stream(self, false, dist - 1);
 
 		add_literal(self, (eword_t)1 << (i % BITS_IN_WORD));
 		return;
@@ -466,4 +510,204 @@ void ewah_iterator_init(struct ewah_iterator *it, struct ewah_bitmap *parent)
 
 	if (it->pointer < it->buffer_size)
 		read_new_rlw(it);
+}
+
+struct rlw_iterator {
+	const eword_t *buffer;
+	size_t size;
+	size_t pointer;
+	size_t literal_word_start;
+
+	struct {
+		const eword_t *word;
+		int literal_words;
+		int running_len;
+		int literal_word_offset;
+		int running_bit;
+	} rlw;
+};
+
+static inline size_t rlw_iterator_word_size(struct rlw_iterator *it)
+{
+	return it->rlw.running_len + it->rlw.literal_words;
+}
+
+static inline size_t rlw_iterator_literal_words(struct rlw_iterator *it)
+{
+	return it->pointer - it->rlw.literal_words;
+}
+
+static inline bool rlw_iterator_next_word(struct rlw_iterator *it)
+{
+	if (it->pointer >= it->size)
+		return false;
+
+	it->rlw.word = &it->buffer[it->pointer];
+	it->pointer = rlw_get_literal_words(it->rlw.word) + 1;
+
+	it->rlw.literal_words = rlw_get_literal_words(it->rlw.word);
+	it->rlw.running_len = rlw_get_running_len(it->rlw.word);
+	it->rlw.running_bit = rlw_get_run_bit(it->rlw.word);
+	it->rlw.literal_word_offset = 0;
+
+	return true;
+}
+
+void rlw_iterator_init(struct rlw_iterator *it, struct ewah_bitmap *bitmap)
+{
+	it->buffer = bitmap->buffer;
+	it->size = bitmap->buffer_size;
+	it->pointer = 0;
+
+	rlw_iterator_next_word(it);
+
+	it->literal_word_start = rlw_iterator_literal_words(it) + it->rlw.literal_word_offset;
+}
+
+void rlw_iterator_discard_first_words(struct rlw_iterator *it, size_t x)
+{
+	while (x > 0) {
+		size_t discard;
+
+		if (it->rlw.running_len > x) {
+			it->rlw.running_len -= x;
+			return;
+		}
+
+		x -= it->rlw.running_len;
+		it->rlw.running_len = 0;
+
+		discard = (x > it->rlw.literal_words) ? it->rlw.literal_words : x;
+
+		it->literal_word_start += discard;
+		it->rlw.literal_words -= discard;
+		x -= discard;
+
+		if (x > 0 || rlw_iterator_word_size(it) == 0) {
+			if (!rlw_iterator_next_word(it))
+				break;
+
+			it->literal_word_start =
+				rlw_iterator_literal_words(it) + it->rlw.literal_word_offset;
+		}
+	}
+}
+
+size_t rlw_iterator_discharge(
+	struct rlw_iterator *it, struct ewah_bitmap *out, size_t max)
+{
+	size_t index = 0;
+
+	while (index < max && rlw_iterator_word_size(it) > 0) {
+		size_t pd, pl = it->rlw.running_len;
+
+		if (index + pl > max) {
+			pl = max - index;
+		}
+
+		ewah_bitmap_add_empty_word_stream(out, it->rlw.running_bit, pl);
+		index += pl;
+
+		pd = it->rlw.literal_words;
+		if (pd + index > max) {
+			pd = max - index;
+		}
+
+		add_dirty_word_stream(out, it->buffer + it->literal_word_start, pd, false);
+		rlw_iterator_discard_first_words(it, pd + pl);
+		index += pd;
+	}
+
+	return index;
+}
+
+size_t rlw_iterator_discharge_negated(
+	struct rlw_iterator *it, struct ewah_bitmap *out, size_t max)
+{
+	size_t index = 0;
+
+	while (index < max && rlw_iterator_word_size(it) > 0) {
+		size_t pd, pl = it->rlw.running_len;
+
+		if (index + pl > max) {
+			pl = max - index;
+		}
+
+		ewah_bitmap_add_empty_word_stream(out, !it->rlw.running_bit, pl);
+		rlw_iterator_discard_first_words(it, pl);
+		index += pl;
+
+		pd = it->rlw.literal_words;
+		if (pd + index > max) {
+			pd = max - index;
+		}
+
+		add_dirty_word_stream(out, it->buffer + it->literal_word_start, pd, true);
+		rlw_iterator_discard_first_words(it, pd);
+		index += pd;
+	}
+
+	return index;
+}
+
+struct ewah_bitmap *
+ewah_bitmap_xor(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j)
+{
+	struct ewah_bitmap *out = ewah_bitmap_new();
+
+	struct rlw_iterator rlw_i;
+	struct rlw_iterator rlw_j;
+
+	rlw_iterator_init(&rlw_i, bitmap_i);
+	rlw_iterator_init(&rlw_j, bitmap_j);
+
+	while (rlw_iterator_word_size(&rlw_i) > 0 && rlw_iterator_word_size(&rlw_j) > 0) {
+		while (rlw_i.rlw.running_len > 0 || rlw_j.rlw.running_len > 0) {
+			struct rlw_iterator *prey, *predator;
+
+			if (rlw_i.rlw.running_len < rlw_j.rlw.running_len) {
+				prey = &rlw_i;
+				predator = &rlw_j;
+			} else {
+				prey = &rlw_j;
+				predator = &rlw_i;
+			}
+
+			if (predator->rlw.running_bit == 0) {
+				size_t index = 
+					rlw_iterator_discharge(prey, out, predator->rlw.running_len);
+
+				ewah_bitmap_add_empty_word_stream(out,
+					false, predator->rlw.running_len - index);
+
+				rlw_iterator_discard_first_words(predator, predator->rlw.running_len);
+			} else {
+				size_t index = 
+					rlw_iterator_discharge_negated(prey, out, predator->rlw.running_len);
+
+				ewah_bitmap_add_empty_word_stream(out,
+					true, predator->rlw.running_len - index);
+
+				rlw_iterator_discard_first_words(predator, predator->rlw.running_len);
+			}
+		}
+
+		size_t literals = min_size(rlw_i.rlw.literal_words, rlw_j.rlw.literal_words);
+
+		if (literals) {
+			size_t k;
+
+			for (k = 0; k < literals; ++k) {
+				ewah_bitmap_add(out,
+					rlw_i.buffer[rlw_i.literal_word_start + k] ^
+					rlw_j.buffer[rlw_j.literal_word_start + k]
+				);
+			}
+
+			rlw_iterator_discard_first_words(&rlw_i, literals);
+			rlw_iterator_discard_first_words(&rlw_j, literals);
+		}
+	}
+
+	return out;
 }

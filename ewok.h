@@ -113,7 +113,7 @@ void ewah_bitmap_set(struct ewah_bitmap *self, size_t i);
  * This is an internal operation used to efficiently generate
  * compressed bitmaps.
  */
-size_t ewah_bitmap_add_word_stream(struct ewah_bitmap *self, bool v, size_t number);
+size_t ewah_bitmap_add_empty_word_stream(struct ewah_bitmap *self, bool v, size_t number);
 
 struct ewah_iterator {
 	const eword_t *buffer;
