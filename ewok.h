@@ -37,18 +37,18 @@ struct ewah_bitmap {
 /**
  * Allocate a new EWAH Compressed bitmap
  */
-struct ewah_bitmap *ewah_bitmap_new(void);
+struct ewah_bitmap *ewah_new(void);
 
 /**
  * Clear all the bits in the bitmap. Does not free or resize
  * memory.
  */
-void ewah_bitmap_clear(struct ewah_bitmap *bitmap);
+void ewah_clear(struct ewah_bitmap *bitmap);
 
 /**
  * Free all the memory of the bitmap
  */
-void ewah_bitmap_free(struct ewah_bitmap *bitmap);
+void ewah_free(struct ewah_bitmap *bitmap);
 
 /**
  * Load a bitmap from a file descriptor. An empty `ewah_bitmap` instance
@@ -58,7 +58,7 @@ void ewah_bitmap_free(struct ewah_bitmap *bitmap);
  *
  * Returns: 0 on success, -1 if a reading error occured (check errno)
  */
-int ewah_bitmap_deserialize(struct ewah_bitmap *self, int fd);
+int ewah_deserialize(struct ewah_bitmap *self, int fd);
 
 /**
  * Dump an existing bitmap to a file descriptor. The bitmap
@@ -70,14 +70,14 @@ int ewah_bitmap_deserialize(struct ewah_bitmap *self, int fd);
  *
  * Returns: 0 on success, -1 if a writing error occured (check errno)
  */
-int ewah_bitmap_serialize(struct ewah_bitmap *self, int fd);
+int ewah_serialize(struct ewah_bitmap *self, int fd);
 
 /**
  * Logical not (bitwise negation) in-place on the bitmap
  *
  * This operation is linear time based on the size of the bitmap.
  */
-void ewah_bitmap_not(struct ewah_bitmap *self);
+void ewah_not(struct ewah_bitmap *self);
 
 /**
  * Call the given callback with the position of every single bit
@@ -86,7 +86,7 @@ void ewah_bitmap_not(struct ewah_bitmap *self);
  * This is an efficient operation that does not fully decompress
  * the bitmap.
  */
-void ewah_bitmap_each_bit(struct ewah_bitmap *self, void (*callback)(size_t, void*), void *payload);
+void ewah_each_bit(struct ewah_bitmap *self, void (*callback)(size_t, void*), void *payload);
 
 /**
  * Set a given bit on the bitmap.
@@ -99,13 +99,13 @@ void ewah_bitmap_each_bit(struct ewah_bitmap *self, void (*callback)(size_t, voi
  * can only set incrementally.
  *
  * E.g.
- *		ewah_bitmap_set(bitmap, 1); // ok
- *		ewah_bitmap_set(bitmap, 76); // ok
- *		ewah_bitmap_set(bitmap, 77); // ok
- *		ewah_bitmap_set(bitmap, 8712800127); // ok
- *		ewah_bitmap_set(bitmap, 25); // failed, assert raised
+ *		ewah_set(bitmap, 1); // ok
+ *		ewah_set(bitmap, 76); // ok
+ *		ewah_set(bitmap, 77); // ok
+ *		ewah_set(bitmap, 8712800127); // ok
+ *		ewah_set(bitmap, 25); // failed, assert raised
  */
-void ewah_bitmap_set(struct ewah_bitmap *self, size_t i);
+void ewah_set(struct ewah_bitmap *self, size_t i);
 
 /**
  * Add a stream of empty words to the bitstream
@@ -113,7 +113,7 @@ void ewah_bitmap_set(struct ewah_bitmap *self, size_t i);
  * This is an internal operation used to efficiently generate
  * compressed bitmaps.
  */
-size_t ewah_bitmap_add_empty_word_stream(struct ewah_bitmap *self, bool v, size_t number);
+size_t ewah_add_empty_words(struct ewah_bitmap *self, bool v, size_t number);
 
 struct ewah_iterator {
 	const eword_t *buffer;
@@ -133,7 +133,7 @@ struct ewah_iterator {
  *
  * E.g.
  *
- *		struct ewah_bitmap *bitmap = ewah_bitmap_new();
+ *		struct ewah_bitmap *bitmap = ewah_new();
  *		struct ewah_iterator it;
  *
  *		ewah_iterator_init(&it, bitmap);
@@ -150,10 +150,10 @@ void ewah_iterator_init(struct ewah_iterator *it, struct ewah_bitmap *parent);
 bool ewah_iterator_next(eword_t *next, struct ewah_iterator *it);
 
 struct ewah_bitmap *
-ewah_bitmap_xor(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j);
-void ewah_bitmap_dump(struct ewah_bitmap *bitmap);
+ewah_xor(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j);
+void ewah_dump(struct ewah_bitmap *bitmap);
 
-void ewah_bitmap_add_dirty_word_stream(
+void ewah_add_dirty_words(
 	struct ewah_bitmap *self, const eword_t *buffer, size_t number, bool negate);
 
 /**

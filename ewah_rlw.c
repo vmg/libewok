@@ -93,7 +93,7 @@ size_t rlwit_discharge(
 			pl = max - index;
 		}
 
-		ewah_bitmap_add_empty_word_stream(out, it->rlw.running_bit ^ negate, pl);
+		ewah_add_empty_words(out, it->rlw.running_bit ^ negate, pl);
 		index += pl;
 
 		pd = it->rlw.literal_words;
@@ -101,7 +101,7 @@ size_t rlwit_discharge(
 			pd = max - index;
 		}
 
-		ewah_bitmap_add_dirty_word_stream(out,
+		ewah_add_dirty_words(out,
 			it->buffer + it->literal_word_start, pd, negate);
 
 		rlwit_discard_first_words(it, pd + pl);
