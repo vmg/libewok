@@ -155,5 +155,6 @@ struct bitmap *ewah_to_bitmap(struct ewah_bitmap *ewah)
 		bitmap->words[i++] = blowup;
 	}
 
+	bitmap->word_alloc = i;
 	return bitmap;
 }
