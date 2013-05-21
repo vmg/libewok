@@ -19,19 +19,32 @@
  */
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "ewok.h"
 
-#define MASK(x) (1 << (x % BITS_IN_WORD))
+#define MASK(x) ((eword_t)1 << (x % BITS_IN_WORD))
 #define BLOCK(x) (x / BITS_IN_WORD)
+
+struct bitmap *bitmap_new(void)
+{
+	struct bitmap *bitmap = malloc(sizeof(struct bitmap));
+	bitmap->words = calloc(32, sizeof(eword_t));
+	bitmap->word_alloc = 32;
+	return bitmap;
+}
 
 void bitmap_set(struct bitmap *self, size_t pos)
 {
 	size_t block = BLOCK(pos);
 
 	if (block >= self->word_alloc) {
+		size_t old_size = self->word_alloc;
 		self->word_alloc = block * 2;
-		self->words = realloc(self->words, self->word_alloc);
+		self->words = realloc(self->words, self->word_alloc * sizeof(eword_t));
+
+		memset(self->words + old_size, 0x0,
+			(self->word_alloc - old_size) * sizeof(eword_t));
 	}
 
 	self->words[block] |= MASK(pos);
@@ -51,8 +64,9 @@ bool bitmap_get(struct bitmap *self, size_t pos)
 	return block < self->word_alloc && (self->words[block] & MASK(pos)) != 0;
 }
 
-void bitmap_compress(struct ewah_bitmap *ewah, struct bitmap *bitmap)
+struct ewah_bitmap *bitmap_compress(struct bitmap *bitmap)
 {
+	struct ewah_bitmap *ewah = ewah_new();
 	size_t i, running_empty_words = 0;
 	eword_t last_word = 0;
 
@@ -63,16 +77,23 @@ void bitmap_compress(struct ewah_bitmap *ewah, struct bitmap *bitmap)
 		}
 
 		if (last_word != 0) {
-			ewah_bitmap_add(ewah, last_word);
+			ewah_add(ewah, last_word);
 		}
 
 		if (running_empty_words > 0) {
-			ewah_bitmap_add_word_stream(ewah, false, running_empty_words);
+			ewah_add_empty_words(ewah, false, running_empty_words);
 			running_empty_words = 0;
 		}
 
 		last_word = bitmap->words[i];
 	}
 
-	ewah_bitmap_add(ewah, last_word);
+	ewah_add(ewah, last_word);
+	return ewah;
+}
+
+void bitmap_free(struct bitmap *bitmap)
+{
+	free(bitmap->words);
+	free(bitmap);
 }

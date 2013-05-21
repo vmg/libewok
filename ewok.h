@@ -151,6 +151,9 @@ bool ewah_iterator_next(eword_t *next, struct ewah_iterator *it);
 
 struct ewah_bitmap *
 ewah_xor(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j);
+struct ewah_bitmap *
+ewah_and(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j);
+
 void ewah_dump(struct ewah_bitmap *bitmap);
 
 void ewah_add_dirty_words(
@@ -165,9 +168,12 @@ struct bitmap {
 	size_t word_alloc;
 };
 
+struct bitmap *bitmap_new(void);
 void bitmap_set(struct bitmap *self, size_t pos);
 void bitmap_clear(struct bitmap *self, size_t pos);
 bool bitmap_get(struct bitmap *self, size_t pos);
-void bitmap_compress(struct ewah_bitmap *ewah, struct bitmap *bitmap);
+
+struct ewah_bitmap * bitmap_to_ewah(struct bitmap *bitmap);
+struct bitmap *ewah_to_bitmap(struct ewah_bitmap *ewah);
 
 #endif
