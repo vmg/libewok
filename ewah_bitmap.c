@@ -26,17 +26,6 @@
 #include "ewok.h"
 #include "ewok_rlw.h"
 
-#if defined(__linux__)
-#  include <endian.h>
-#elif defined(__FreeBSD__) || defined(__NetBSD__)
-#  include <sys/endian.h>
-#elif defined(__OpenBSD__)
-#  include <sys/types.h>
-#  define be16toh(x) betoh16(x)
-#  define be32toh(x) betoh32(x)
-#  define be64toh(x) betoh64(x)
-#endif
-
 static inline eword_t min_size(size_t a, size_t b)
 {
 	return a < b ? a : b;
@@ -292,129 +281,6 @@ void ewah_each_bit(struct ewah_bitmap *self, void (*callback)(size_t, void*), vo
 	}
 }
 
-void ewah_not(struct ewah_bitmap *self)
-{
-	size_t pointer = 0;
-
-	while (pointer < self->buffer_size) {
-		eword_t *word = &self->buffer[pointer];
-		size_t literals, k; 
-
-		rlw_xor_run_bit(word);
-		++pointer;
-
-		literals = rlw_get_literal_words(word);
-		for (k = 0; k < literals; ++k) {
-			self->buffer[pointer] = ~self->buffer[pointer];
-			++pointer;
-		}
-	}
-}
-
-int ewah_serialize(struct ewah_bitmap *self, int fd)
-{
-	size_t i;
-	eword_t dump[2048];
-	const size_t words_per_dump = sizeof(dump) / sizeof(eword_t);
-
-	/* 32 bit -- bit size fr the map */
-	uint32_t bitsize =  htobe32((uint32_t)self->bit_size);
-	if (write(fd, &bitsize, 4) != 4)
-		return -1;
-
-	/** 32 bit -- number of compressed 64-bit words */
-	uint32_t word_count =  htobe32((uint32_t)self->buffer_size);
-	if (write(fd, &word_count, 4) != 4)
-		return -1;
-
-	/** 64 bit x N -- compressed words */
-	const eword_t *buffer = self->buffer;
-	size_t words_left = self->buffer_size;
-
-	while (words_left >= words_per_dump) {
-		for (i = 0; i < words_per_dump; ++i, ++buffer)
-			dump[i] = htobe64(*buffer);
-
-		if (write(fd, dump, sizeof(dump)) != sizeof(dump))
-			return -1;
-
-		words_left -= words_per_dump;
-	}
-
-	if (words_left) {
-		for (i = 0; i < words_left; ++i, ++buffer)
-			dump[i] = htobe64(*buffer);
-
-		if (write(fd, dump, words_left * 8) != words_left * 8)
-			return -1;
-	}
-
-	/** 32 bit -- position for the RLW */
-	uint32_t rlw_pos = (uint8_t*)self->rlw - (uint8_t *)self->buffer;
-	rlw_pos = htobe32(rlw_pos / sizeof(eword_t));
-
-	if (write(fd, &rlw_pos, 4) != 4)
-		return -1;
-
-	return 0;
-}
-
-int ewah_deserialize(struct ewah_bitmap *self, int fd)
-{
-	size_t i;
-	eword_t dump[2048];
-	const size_t words_per_dump = sizeof(dump) / sizeof(eword_t);
-
-	/* 32 bit -- bit size fr the map */
-	uint32_t bitsize;
-	if (read(fd, &bitsize, 4) != 4)
-		return -1;
-
-	self->bit_size = (size_t)be32toh(bitsize);
-
-	/** 32 bit -- number of compressed 64-bit words */
-	uint32_t word_count;
-	if (read(fd, &word_count, 4) != 4)
-		return -1;
-
-	self->buffer_size = (size_t)be32toh(word_count);
-	self->buffer = realloc(self->buffer, self->buffer_size * sizeof(eword_t));
-
-	if (!self->buffer)
-		return -1;
-
-	/** 64 bit x N -- compressed words */
-	eword_t *buffer = self->buffer;
-	size_t words_left = self->buffer_size;
-
-	while (words_left >= words_per_dump) {
-		if (read(fd, dump, sizeof(dump)) != sizeof(dump))
-			return -1;
-
-		for (i = 0; i < words_per_dump; ++i, ++buffer)
-			*buffer = be64toh(dump[i]);
-
-		words_left -= words_per_dump;
-	}
-
-	if (words_left) {
-		if (read(fd, dump, words_left * 8) != words_left * 8)
-			return -1;
-
-		for (i = 0; i < words_left; ++i, ++buffer)
-			*buffer = be64toh(dump[i]);
-	}
-
-	/** 32 bit -- position for the RLW */
-	uint32_t rlw_pos;
-	if (read(fd, &rlw_pos, 4) != 4)
-		return -1;
-
-	self->rlw = self->buffer + be32toh(rlw_pos);
-
-	return 0;
-}
-
 struct ewah_bitmap *ewah_new(void)
 {
 	struct ewah_bitmap *bitmap;
@@ -525,6 +391,25 @@ void ewah_dump(struct ewah_bitmap *bitmap)
 	printf("\n");
 }
 
+void ewah_not(struct ewah_bitmap *self)
+{
+	size_t pointer = 0;
+
+	while (pointer < self->buffer_size) {
+		eword_t *word = &self->buffer[pointer];
+		size_t literals, k; 
+
+		rlw_xor_run_bit(word);
+		++pointer;
+
+		literals = rlw_get_literal_words(word);
+		for (k = 0; k < literals; ++k) {
+			self->buffer[pointer] = ~self->buffer[pointer];
+			++pointer;
+		}
+	}
+}
+
 struct ewah_bitmap *
 ewah_xor(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j)
 {
@@ -539,6 +424,8 @@ ewah_xor(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j)
 	while (rlwit_word_size(&rlw_i) > 0 && rlwit_word_size(&rlw_j) > 0) {
 		while (rlw_i.rlw.running_len > 0 || rlw_j.rlw.running_len > 0) {
 			struct rlw_iterator *prey, *predator;
+			size_t index;
+			bool negate_words;
 
 			if (rlw_i.rlw.running_len < rlw_j.rlw.running_len) {
 				prey = &rlw_i;
@@ -548,23 +435,11 @@ ewah_xor(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j)
 				predator = &rlw_i;
 			}
 
-			if (predator->rlw.running_bit == 0) {
-				size_t index = 
-					rlwit_discharge(prey, out, predator->rlw.running_len, false);
+			negate_words = !!predator->rlw.running_bit;
+			index = rlwit_discharge(prey, out, predator->rlw.running_len, negate_words);
 
-				ewah_add_empty_words(out,
-					false, predator->rlw.running_len - index);
-
-				rlwit_discard_first_words(predator, predator->rlw.running_len);
-			} else {
-				size_t index = 
-					rlwit_discharge(prey, out, predator->rlw.running_len, true);
-
-				ewah_add_empty_words(out,
-					true, predator->rlw.running_len - index);
-
-				rlwit_discard_first_words(predator, predator->rlw.running_len);
-			}
+			ewah_add_empty_words(out, negate_words, predator->rlw.running_len - index);
+			rlwit_discard_first_words(predator, predator->rlw.running_len);
 		}
 
 		size_t literals = min_size(rlw_i.rlw.literal_words, rlw_j.rlw.literal_words);
