@@ -80,5 +80,35 @@ static eword_t rlw_size(const eword_t *self)
 	return rlw_get_running_len(self) + rlw_get_literal_words(self);
 }
 
+struct rlw_iterator {
+	const eword_t *buffer;
+	size_t size;
+	size_t pointer;
+	size_t literal_word_start;
+
+	struct {
+		const eword_t *word;
+		int literal_words;
+		int running_len;
+		int literal_word_offset;
+		int running_bit;
+	} rlw;
+};
+
+void rlwit_init(struct rlw_iterator *it, struct ewah_bitmap *bitmap);
+void rlwit_discard_first_words(struct rlw_iterator *it, size_t x);
+size_t rlwit_discharge(
+	struct rlw_iterator *it, struct ewah_bitmap *out, size_t max, bool negate);
+
+static inline size_t rlwit_word_size(struct rlw_iterator *it)
+{
+	return it->rlw.running_len + it->rlw.literal_words;
+}
+
+static inline size_t rlwit_literal_words(struct rlw_iterator *it)
+{
+	return it->pointer - it->rlw.literal_words;
+}
+
 #endif
 

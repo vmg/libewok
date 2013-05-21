@@ -149,6 +149,13 @@ void ewah_iterator_init(struct ewah_iterator *it, struct ewah_bitmap *parent);
  */
 bool ewah_iterator_next(eword_t *next, struct ewah_iterator *it);
 
+struct ewah_bitmap *
+ewah_bitmap_xor(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j);
+void ewah_bitmap_dump(struct ewah_bitmap *bitmap);
+
+void ewah_bitmap_add_dirty_word_stream(
+	struct ewah_bitmap *self, const eword_t *buffer, size_t number, bool negate);
+
 /**
  * Uncompressed, old-school bitmap that can be efficiently compressed
  * into an `ewah_bitmap`.
