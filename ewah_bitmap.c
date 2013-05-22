@@ -471,7 +471,6 @@ void ewah_xor(
 	}
 
 	out->bit_size = max_size(bitmap_i->bit_size, bitmap_j->bit_size);
-	return out;
 }
 
 void ewah_and(
@@ -533,7 +532,6 @@ void ewah_and(
 	}
 
 	out->bit_size = max_size(bitmap_i->bit_size, bitmap_j->bit_size);
-	return out;
 }
 
 void ewah_and_not(
@@ -599,7 +597,6 @@ void ewah_and_not(
 	}
 
 	out->bit_size = max_size(bitmap_i->bit_size, bitmap_j->bit_size);
-	return out;
 }
 
 void ewah_or(
@@ -662,5 +659,4 @@ void ewah_or(
 	}
 
 	out->bit_size = max_size(bitmap_i->bit_size, bitmap_j->bit_size);
-	return out;
 }

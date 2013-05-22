@@ -112,31 +112,16 @@ static struct ewah_bitmap *generate_bitmap(size_t max_size)
 	return bitmap;
 }
 
-static bool test_operation(
-	struct ewah_bitmap *a,
-	struct ewah_bitmap *b,
-	struct ewah_bitmap *(*generate)(struct ewah_bitmap *, struct ewah_bitmap *),
-	size_t (*check)(size_t, size_t))
-{
-	struct ewah_bitmap *out;
-	bool ok;
-
-	out = generate(a, b);
-	ok = verify_operation(a, b, out, check);
-
-	ewah_free(out);
-	return ok;
-}
-
 static void test_for_size(size_t size)
 {
 	struct ewah_bitmap *a = generate_bitmap(size);
 	struct ewah_bitmap *b = generate_bitmap(size);
+	struct ewah_bitmap *result = ewah_new();
 	size_t i;
 
 	struct {
 		const char *name;
-		struct ewah_bitmap *(*generate)(struct ewah_bitmap *, struct ewah_bitmap *);
+		void (*generate)(struct ewah_bitmap *, struct ewah_bitmap *, struct ewah_bitmap *);
 		size_t (*check)(size_t, size_t);
 	} tests[] = {
 		{"or", &ewah_or, &op_or},
@@ -148,12 +133,17 @@ static void test_for_size(size_t size)
 	for (i = 0; i < sizeof(tests)/sizeof(tests[0]); ++i) {
 		fprintf(stderr, "'%s' in %zu bits... ", tests[i].name, size);
 
-		if (test_operation(a, b, tests[i].generate, tests[i].check))
+		tests[i].generate(a, b, result);
+
+		if (verify_operation(a, b, result, tests[i].check))
 			fprintf(stderr, "OK\n");
+
+		ewah_clear(result);
 	}
 
 	ewah_free(a);
 	ewah_free(b);
+	ewah_free(result);
 }
 
 int main(int argc, char *argv[])
