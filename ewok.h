@@ -149,14 +149,25 @@ void ewah_iterator_init(struct ewah_iterator *it, struct ewah_bitmap *parent);
  */
 bool ewah_iterator_next(eword_t *next, struct ewah_iterator *it);
 
-struct ewah_bitmap *
-ewah_xor(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j);
-struct ewah_bitmap *
-ewah_and(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j);
-struct ewah_bitmap *
-ewah_and_not(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j);
-struct ewah_bitmap *
-ewah_or(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j);
+void ewah_or(
+	struct ewah_bitmap *bitmap_i,
+	struct ewah_bitmap *bitmap_j,
+	struct ewah_bitmap *out);
+
+void ewah_and_not(
+	struct ewah_bitmap *bitmap_i,
+	struct ewah_bitmap *bitmap_j,
+	struct ewah_bitmap *out);
+
+void ewah_xor(
+	struct ewah_bitmap *bitmap_i,
+	struct ewah_bitmap *bitmap_j,
+	struct ewah_bitmap *out);
+
+void ewah_and(
+	struct ewah_bitmap *bitmap_i,
+	struct ewah_bitmap *bitmap_j,
+	struct ewah_bitmap *out);
 
 void ewah_dump(struct ewah_bitmap *bitmap);
 

@@ -415,11 +415,11 @@ void ewah_not(struct ewah_bitmap *self)
 	}
 }
 
-struct ewah_bitmap *
-ewah_xor(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j)
+void ewah_xor(
+	struct ewah_bitmap *bitmap_i,
+	struct ewah_bitmap *bitmap_j,
+	struct ewah_bitmap *out)
 {
-	struct ewah_bitmap *out = ewah_new();
-
 	struct rlw_iterator rlw_i;
 	struct rlw_iterator rlw_j;
 
@@ -474,11 +474,11 @@ ewah_xor(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j)
 	return out;
 }
 
-struct ewah_bitmap *
-ewah_and(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j)
+void ewah_and(
+	struct ewah_bitmap *bitmap_i,
+	struct ewah_bitmap *bitmap_j,
+	struct ewah_bitmap *out)
 {
-	struct ewah_bitmap *out = ewah_new();
-
 	struct rlw_iterator rlw_i;
 	struct rlw_iterator rlw_j;
 
@@ -536,11 +536,11 @@ ewah_and(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j)
 	return out;
 }
 
-struct ewah_bitmap *
-ewah_and_not(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j)
+void ewah_and_not(
+	struct ewah_bitmap *bitmap_i,
+	struct ewah_bitmap *bitmap_j,
+	struct ewah_bitmap *out)
 {
-	struct ewah_bitmap *out = ewah_new();
-
 	struct rlw_iterator rlw_i;
 	struct rlw_iterator rlw_j;
 
@@ -602,11 +602,11 @@ ewah_and_not(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j)
 	return out;
 }
 
-struct ewah_bitmap *
-ewah_or(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j)
+void ewah_or(
+	struct ewah_bitmap *bitmap_i,
+	struct ewah_bitmap *bitmap_j,
+	struct ewah_bitmap *out)
 {
-	struct ewah_bitmap *out = ewah_new();
-
 	struct rlw_iterator rlw_i;
 	struct rlw_iterator rlw_j;
 
