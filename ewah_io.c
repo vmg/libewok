@@ -136,25 +136,3 @@ int ewah_deserialize(struct ewah_bitmap *self, int fd)
 
 	return 0;
 }
-
-struct bitmap *ewah_to_bitmap(struct ewah_bitmap *ewah)
-{
-	struct bitmap *bitmap = bitmap_new();
-	struct ewah_iterator it;
-	eword_t blowup;
-	size_t i = 0;
-
-	ewah_iterator_init(&it, ewah);
-
-	while (ewah_iterator_next(&blowup, &it)) {
-		if (i >= bitmap->word_alloc) {
-			bitmap->word_alloc *= 1.5;
-			bitmap->words = realloc(bitmap->words, bitmap->word_alloc * sizeof(eword_t));
-		}
-
-		bitmap->words[i++] = blowup;
-	}
-
-	bitmap->word_alloc = i;
-	return bitmap;
-}
