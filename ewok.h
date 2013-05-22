@@ -153,6 +153,10 @@ struct ewah_bitmap *
 ewah_xor(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j);
 struct ewah_bitmap *
 ewah_and(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j);
+struct ewah_bitmap *
+ewah_and_not(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j);
+struct ewah_bitmap *
+ewah_or(struct ewah_bitmap *bitmap_i, struct ewah_bitmap *bitmap_j);
 
 void ewah_dump(struct ewah_bitmap *bitmap);
 
