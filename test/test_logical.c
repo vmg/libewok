@@ -38,6 +38,16 @@ static size_t op_and(size_t a, size_t b)
 	return a & b;
 }
 
+static size_t op_or(size_t a, size_t b)
+{
+	return a | b;
+}
+
+static size_t op_andnot(size_t a, size_t b)
+{
+	return a & ~b;
+}
+
 static bool verify_operation(
 	struct ewah_bitmap *_a, struct ewah_bitmap *_b,
 	struct ewah_bitmap *_result, size_t (*op)(size_t, size_t))
@@ -102,27 +112,48 @@ static struct ewah_bitmap *generate_bitmap(size_t max_size)
 	return bitmap;
 }
 
-static void test_operation(
-	const char *name,
-	size_t size,
+static bool test_operation(
+	struct ewah_bitmap *a,
+	struct ewah_bitmap *b,
 	struct ewah_bitmap *(*generate)(struct ewah_bitmap *, struct ewah_bitmap *),
 	size_t (*check)(size_t, size_t))
 {
-	struct ewah_bitmap *a = generate_bitmap(size);
-	struct ewah_bitmap *b = generate_bitmap(size);
 	struct ewah_bitmap *out;
-
-	fprintf(stderr, "'%s' in %zu bits... ", name, size);
+	bool ok;
 
 	out = generate(a, b);
+	ok = verify_operation(a, b, out, check);
 
-	if (verify_operation(a, b, out, check)) {
-		fprintf(stderr, "OK\n");
+	ewah_free(out);
+	return ok;
+}
+
+static void test_for_size(size_t size)
+{
+	struct ewah_bitmap *a = generate_bitmap(size);
+	struct ewah_bitmap *b = generate_bitmap(size);
+	size_t i;
+
+	struct {
+		const char *name;
+		struct ewah_bitmap *(*generate)(struct ewah_bitmap *, struct ewah_bitmap *);
+		size_t (*check)(size_t, size_t);
+	} tests[] = {
+		{"or", &ewah_or, &op_or},
+		{"xor", &ewah_xor, &op_xor},
+		{"and", &ewah_and, &op_and},
+		{"and-not", &ewah_and_not, &op_andnot}
+	};
+
+	for (i = 0; i < sizeof(tests)/sizeof(tests[0]); ++i) {
+		fprintf(stderr, "'%s' in %zu bits... ", tests[i].name, size);
+
+		if (test_operation(a, b, tests[i].generate, tests[i].check))
+			fprintf(stderr, "OK\n");
 	}
 
 	ewah_free(a);
 	ewah_free(b);
-	ewah_free(out);
 }
 
 int main(int argc, char *argv[])
@@ -130,9 +161,8 @@ int main(int argc, char *argv[])
 	size_t i;
 	srand(time(NULL));
 
-	for (i = 8; i < 32; ++i) {
-		test_operation("xor", (size_t)1 << i, ewah_xor, op_xor);
-		test_operation("and", (size_t)1 << i, ewah_and, op_and);
+	for (i = 8; i < 30; ++i) {
+		test_for_size((size_t)1 << i);
 	}
 
 	return 0;
