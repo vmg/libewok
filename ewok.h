@@ -23,6 +23,16 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifndef ewah_malloc
+#	define ewah_malloc malloc
+#endif
+#ifndef ewah_realloc
+#	define ewah_realloc realloc
+#endif
+#ifndef ewah_calloc
+#	define ewah_calloc calloc
+#endif
+
 typedef uint64_t eword_t;
 #define BITS_IN_WORD (sizeof(eword_t) * 8)
 

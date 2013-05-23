@@ -100,7 +100,7 @@ int ewah_deserialize(struct ewah_bitmap *self, int fd)
 		return -1;
 
 	self->buffer_size = (size_t)be32toh(word_count);
-	self->buffer = realloc(self->buffer, self->buffer_size * sizeof(eword_t));
+	self->buffer = ewah_realloc(self->buffer, self->buffer_size * sizeof(eword_t));
 
 	if (!self->buffer)
 		return -1;
