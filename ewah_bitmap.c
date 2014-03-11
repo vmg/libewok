@@ -33,7 +33,7 @@ static inline size_t min_size(size_t a, size_t b)
 
 static inline size_t max_size(size_t a, size_t b)
 {
-	return a < b ? a : b;
+	return a > b ? a : b;
 }
 
 static inline void buffer_grow(struct ewah_bitmap *self, size_t new_size)
